@@ -25,6 +25,10 @@ library(Epi)
 library(reportROC)
 library(pROC)
 library(generalhoslem)
+library(tidyverse)
+library(lubridate)
+library(dlookr)
+library(survival)
 library(lawstat)
 library(verification)
 library(ROCR)
@@ -34,6 +38,7 @@ library(dplyr)
 library(ggplot2)
 library(moonBook)
 library(naniar) #naniar 패키지를 불러옵니다.
+library(data.table)
 complete.cases(dat)
 miss_case_summary(dat) # case : 행 기준
 miss_var_summary(dat) # variable : 변수 기준
@@ -44,11 +49,7 @@ dat[complete.cases(dat$PEF_sup, dat$MIP_sup), ]
 dat %>% mutate(pregnant=ifelse(is.na(dat),
                                mean(dat,na.rm=T),
                                pregnant))
-save.image("20210809.RData")
-load("20210809.RData")
-dat <- read_xlsx("ALS_ALSFRS&호흡기검사-변환_init_ALSFRS_complete.xlsx")
-dat <- read.csv("ALS_ALSFRS&호흡기검사-변환_init_ALSFRS_complete_addProg.csv")
-write.csv(dat,"ALS_ALSFRS&호흡기검사-변환_init_ALSFRS_complete_addProg.csv")
+
 dat[,c("sex","heart","lung","pneumonia","Onset_region","ALSFRS_12_prog1","ALSFRS_12_prog2","ALSFRS_12_prog3","ALSFRS_10_prog","ALSFRS_11_prog")] <- lapply(dat[,c("sex","heart","lung","pneumonia","Onset_region","ALSFRS_12_prog1","ALSFRS_12_prog2","ALSFRS_12_prog3","ALSFRS_10_prog","ALSFRS_11_prog")],as.factor)
 dat[,c("birth_date","ALSFRS_date","resp_date","Onset","Dx")] <- lapply(dat[,c("birth_date","ALSFRS_date","resp_date","Onset","Dx")],as.Date)
 dat[,c("height","weight","BMI")] <- lapply(dat[,c("height","weight","BMI")],as.numeric)
@@ -246,6 +247,38 @@ reportROC(dat$ALSFRS_12_prog1,dat$MEP_sit) #cutoff value 37.165, sensitivity 0.5
 result <- ROC(form=ALSFRS_12_prog1~SNIP_sit,data=dat,plot="Roc")
 reportROC(dat$ALSFRS_12_prog1,dat$SNIP_sit) #cutoff value 19.165, sensitivity 0.751, specificity 0.875, p-value <0001, AUC=0.828
 
+# 사망일시 데이터 추가 
+surv_temp <- read_xlsx("SURVIVAL.xlsx",sheet=2)
+surv_temp <- surv_temp %>% rename(birthday=생년월일,
+                                  name=이름,
+                                  deathdate=사망확인,
+                                  sex=성별구분)
+surv_temp <- surv_temp %>% mutate(birthday=as.numeric(birthday),
+                                  sex=factor(sex),
+                                  deathdate=as.numeric(deathdate))
+surv <- surv %>% mutate(patient_ID=as.numeric(patient_ID),
+               birthday=as.numeric(birthday),
+               sex=factor(sex))
+surv_temp1 <- surv_temp %>% select(name,birthday,deathdate)
+surv <- surv %>% left_join(surv_temp1,by=c("name","birthday"))
+surv1 <- surv %>% select(patient_ID,deathdate,name)
+dat1 <- dat %>% left_join(surv1,by="patient_ID")
+dat1 <- dat1 %>% select(patient_ID,name,deathdate,everything())
+
+#
+
 # survival 기간 data가 있는 환자를 기준으로 해서 survival 기간의 차이가 있는지 확인. SNIP cut-off에 따른 survival분석. 생존기간 분석 및 hazard ratio 
+
 # SNIP cutoff value 이상인 시점에 NIV를 적용한 early NIV group vs. late NIV group의 survival분석. KM curve, hazard ratio, concordance analysis 
 # ALSFRS slow,moderate,rapid progression, bulbar onset/limb onset으로 나눠서 분석 
+
+
+
+dat <- fread("ALS_ALSFRS&호흡기검사-변환_init_ALSFRS_complete.xlsx")
+dat <- fread("ALS_ALSFRS&호흡기검사-변환_init_ALSFRS_complete_addProg.csv")
+fwrite(dat,"ALS_ALSFRS&호흡기검사-변환_init_ALSFRS_complete_addProg.csv")
+surv <- read_xlsx("SURVIVAL.xlsx",sheet=1)
+write.csv(dat1,"ALSFRS_surv.csv",quote=F,row.names = F)
+
+save.image("20210809.RData")
+load("20210809.RData")
